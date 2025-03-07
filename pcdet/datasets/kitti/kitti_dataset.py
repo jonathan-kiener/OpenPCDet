@@ -3,6 +3,7 @@ import pickle
 
 import numpy as np
 from skimage import io
+from pathlib import Path
 
 from . import kitti_utils
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
@@ -472,7 +473,6 @@ if __name__ == '__main__':
     import sys
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_kitti_infos':
         import yaml
-        from pathlib import Path
         from easydict import EasyDict
         dataset_cfg = EasyDict(yaml.safe_load(open(sys.argv[2])))
         ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
