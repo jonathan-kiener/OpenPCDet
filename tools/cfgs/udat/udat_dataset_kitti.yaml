@@ -1,16 +1,22 @@
 DATASET: 'UdatDataset'
-DATA_PATH: '/home/kiener.35/Research/auto_percetion_experts/udat/example_data/single-infrastructure-side-kitti'
+
+# Relative to OpenPCDet
+DATA_PATH: '../../example_data/single-infrastructure-side-kitti'
+
+# Relative to DATA_PATH
+PSEUDO_LABEL_PATH: '../../out/example/bbox_pseudo'
+KITTI_INFOS_PATH: '../../out/example/kitti_infos/it_0'
 
 POINT_CLOUD_RANGE: [0, -50, -3, 150, 50, 1]
 
 DATA_SPLIT: {
     'train': train,
-    'test': val
+    'test': train
 }
 
 INFO_PATH: {
     'train': [kitti_infos_train.pkl],
-    'test': [kitti_infos_val.pkl],
+    'test': [kitti_infos_train.pkl],
 }
 
 GET_ITEM_LIST: ["points"]

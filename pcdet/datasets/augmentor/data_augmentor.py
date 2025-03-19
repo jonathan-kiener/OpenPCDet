@@ -8,10 +8,11 @@ from . import augmentor_utils, database_sampler
 
 
 class DataAugmentor(object):
-    def __init__(self, root_path, augmentor_configs, class_names, logger=None):
+    def __init__(self, root_path, augmentor_configs, class_names, logger=None, kitti_info_root=None):
         self.root_path = root_path
         self.class_names = class_names
         self.logger = logger
+        self.kitti_info_root = kitti_info_root
 
         self.data_augmentor_queue = []
         aug_config_list = augmentor_configs if isinstance(augmentor_configs, list) \
@@ -41,7 +42,8 @@ class DataAugmentor(object):
             root_path=self.root_path,
             sampler_cfg=config,
             class_names=self.class_names,
-            logger=self.logger
+            logger=self.logger,
+            kitti_info_root=self.kitti_info_root
         )
         return db_sampler
 

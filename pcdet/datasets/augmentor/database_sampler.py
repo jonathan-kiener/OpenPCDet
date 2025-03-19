@@ -13,10 +13,11 @@ from ...utils import box_utils, common_utils, calibration_kitti
 from pcdet.datasets.kitti.kitti_object_eval_python import kitti_common
 
 class DataBaseSampler(object):
-    def __init__(self, root_path, sampler_cfg, class_names, logger=None):
+    def __init__(self, root_path, sampler_cfg, class_names, logger=None, kitti_info_root=None):
         self.root_path = root_path
         self.class_names = class_names
         self.sampler_cfg = sampler_cfg
+        self.kitti_info_root = kitti_info_root
 
         self.img_aug_type = sampler_cfg.get('IMG_AUG_TYPE', None)
         self.img_aug_iou_thresh = sampler_cfg.get('IMG_AUG_IOU_THRESH', 0.5)
@@ -29,12 +30,13 @@ class DataBaseSampler(object):
         self.use_shared_memory = sampler_cfg.get('USE_SHARED_MEMORY', False)
 
         for db_info_path in sampler_cfg.DB_INFO_PATH:
-            db_info_path = self.root_path.resolve() / db_info_path
+            db_info_path = self.root_path.resolve() / (kitti_info_root or "") / db_info_path
+            logger.info(f"BING BONG {db_info_path}")
             if not db_info_path.exists():
                 assert len(sampler_cfg.DB_INFO_PATH) == 1
                 sampler_cfg.DB_INFO_PATH[0] = sampler_cfg.BACKUP_DB_INFO['DB_INFO_PATH']
                 sampler_cfg.DB_DATA_PATH[0] = sampler_cfg.BACKUP_DB_INFO['DB_DATA_PATH']
-                db_info_path = self.root_path.resolve() / sampler_cfg.DB_INFO_PATH[0]
+                db_info_path = self.root_path.resolve() / (self.kitti_info_root or "") / sampler_cfg.DB_INFO_PATH[0]
                 sampler_cfg.NUM_POINT_FEATURES = sampler_cfg.BACKUP_DB_INFO['NUM_POINT_FEATURES']
 
             with open(str(db_info_path), 'rb') as f:
@@ -390,7 +392,7 @@ class DataBaseSampler(object):
                 start_offset, end_offset = info['global_data_offset']
                 obj_points = copy.deepcopy(gt_database_data[start_offset:end_offset])
             else:
-                file_path = self.root_path / info['path']
+                file_path = self.root_path / (self.kitti_info_root or "") / info['path']
 
                 obj_points = np.fromfile(str(file_path), dtype=np.float32).reshape(
                     [-1, self.sampler_cfg.NUM_POINT_FEATURES])

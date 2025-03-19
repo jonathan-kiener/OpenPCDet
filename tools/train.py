@@ -126,7 +126,8 @@ def main():
         training=True,
         merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
         total_epochs=args.epochs,
-        seed=666 if args.fix_random_seed else None
+        seed=666 if args.fix_random_seed else None,
+        root_path=cfg.ROOT_DIR / cfg.DATA_CONFIG.DATA_PATH
     )
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set)

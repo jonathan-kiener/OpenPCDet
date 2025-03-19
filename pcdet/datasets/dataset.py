@@ -29,7 +29,8 @@ class DatasetTemplate(torch_data.Dataset):
             point_cloud_range=self.point_cloud_range
         )
         self.data_augmentor = DataAugmentor(
-            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, logger=self.logger
+            self.root_path, self.dataset_cfg.DATA_AUGMENTOR, self.class_names, logger=self.logger,
+            kitti_info_root=self.dataset_cfg.KITTI_INFOS_PATH
         ) if self.training else None
         self.data_processor = DataProcessor(
             self.dataset_cfg.DATA_PROCESSOR, point_cloud_range=self.point_cloud_range,
