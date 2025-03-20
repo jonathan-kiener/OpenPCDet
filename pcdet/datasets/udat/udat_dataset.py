@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 from skimage import io
 
+from easydict import EasyDict
 from pathlib import Path
 
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
@@ -28,9 +29,12 @@ class UdatDataset(KittiDataset):
         return np.array(io.imread(image).shape[:2], dtype=np.int32)
     
     def get_label(self, idx):
-        label_file = self.root_path / self.dataset_cfg.PSEUDO_LABEL_PATH / ('%s.npy' % idx)
-        assert label_file.exists() , f"File {label_file.name} not found."
-        return object3d_udat.get_objects_from_label(label_file, self.get_calib(idx))
+        if self.dataset_cfg.LABEL_MODE == 'kitti':
+            return super().get_label(idx)
+        else:
+            label_file = self.root_path / self.dataset_cfg.PSEUDO_LABEL_PATH / ('%s.npy' % idx)
+            assert label_file.exists() , f"File {label_file.name} not found."
+            return object3d_udat.get_objects_from_label(label_file, self.get_calib(idx))
     
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -168,6 +172,10 @@ class UdatDataset(KittiDataset):
         with open(db_info_save_path, 'wb') as f:
             pickle.dump(all_db_infos, f)
 
+    def evaluation(self, det_annos, class_names, **kwargs):
+        return "No eval avaliable", EasyDict()
+
+
 def create_kitti_infos(dataset_cfg, class_names, save_path, workers=4):
     dataset = UdatDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=False)
     train_split, val_split = 'train', 'val'
@@ -215,8 +223,6 @@ if __name__ == '__main__':
     import sys
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_kitti_infos':
         import yaml
-        from easydict import EasyDict
-        from pathlib import Path
 
         dataset_cfg = EasyDict(yaml.safe_load(open(sys.argv[2])))
         out_path = Path(dataset_cfg.DATA_PATH) / (dataset_cfg.KITTI_INFOS_PATH or "")

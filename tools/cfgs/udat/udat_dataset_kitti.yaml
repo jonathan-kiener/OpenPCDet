@@ -1,11 +1,14 @@
 DATASET: 'UdatDataset'
 
-# Relative to OpenPCDet
-DATA_PATH: '../../example_data/single-infrastructure-side-kitti'
+# Relative to OpenPCDet/tools
+DATA_PATH: '../../../example_data/single-infrastructure-side-kitti'
 
 # Relative to DATA_PATH
-PSEUDO_LABEL_PATH: '../../out/example/bbox_pseudo'
-KITTI_INFOS_PATH: '../../out/example/kitti_infos/it_0'
+PSEUDO_LABEL_PATH: '../../out/example/bbox/it_1'
+KITTI_INFOS_PATH: '../../out/example/kitti_infos/it_1'
+
+# Either npy or kitti
+LABEL_MODE: 'kitti'
 
 POINT_CLOUD_RANGE: [0, -50, -3, 150, 50, 1]
 
