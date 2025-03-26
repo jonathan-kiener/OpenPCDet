@@ -13,6 +13,21 @@ from ..kitti.kitti_dataset import KittiDataset
 
 class UdatDataset(KittiDataset):
 
+    def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
+        """
+        Args:
+            root_path:
+            dataset_cfg:
+            class_names:
+            training:
+            logger:
+        """
+        super().__init__(
+            dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
+        )
+        
+        self.sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)][:dataset_cfg.MAX_USED]
+
     def get_image_raw(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.jpg' % idx)
         assert img_file.exists() , f"File {img_file} not found."
@@ -25,6 +40,7 @@ class UdatDataset(KittiDataset):
         return image
 
     def get_image_shape(self, idx):
+        idx = "000001"
         image = self.get_image_raw(idx)
         return np.array(io.imread(image).shape[:2], dtype=np.int32)
     
@@ -119,7 +135,7 @@ class UdatDataset(KittiDataset):
 
         sample_id_list = sample_id_list if sample_id_list is not None else self.sample_id_list
         with futures.ThreadPoolExecutor(num_workers) as executor:
-            print(f"--sample_id_list: {sample_id_list}")
+            print(f"--sample_id_list: {len(sample_id_list)}")
             infos = executor.map(process_single_scene, sample_id_list)
         return list(infos)
     
@@ -174,7 +190,15 @@ class UdatDataset(KittiDataset):
 
     def evaluation(self, det_annos, class_names, **kwargs):
         return "No eval avaliable", EasyDict()
+    
+    def set_split(self, split):
+        super().__init__(
+            dataset_cfg=self.dataset_cfg, class_names=self.class_names, training=self.training, root_path=self.root_path, logger=self.logger
+        )
+        self.split = split
+        self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
 
+        self.sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)][:dataset_cfg.MAX_USED]
 
 def create_kitti_infos(dataset_cfg, class_names, save_path, workers=4):
     dataset = UdatDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=False)
@@ -186,34 +210,20 @@ def create_kitti_infos(dataset_cfg, class_names, save_path, workers=4):
     test_filename = save_path / 'kitti_infos_test.pkl'
 
     ## Not every frame has a pseudo-label due to remainders.
-    sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)]
+    #sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)]
 
     print('---------------Start to generate data infos---------------')
 
-    dataset.set_split(train_split)
-    kitti_infos_train = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True, sample_id_list=sample_id_list)
+    kitti_infos_train = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True)
     with open(train_filename, 'wb') as f:
         pickle.dump(kitti_infos_train, f)
     print('Kitti info train file is saved to %s' % train_filename)
 
-    dataset.set_split(val_split)
-    kitti_infos_val = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True)
-    with open(val_filename, 'wb') as f:
-        pickle.dump(kitti_infos_val, f)
-    print('Kitti info val file is saved to %s' % val_filename)
-
     with open(trainval_filename, 'wb') as f:
-        pickle.dump(kitti_infos_train + kitti_infos_val, f)
+        pickle.dump(kitti_infos_train, f)
     print('Kitti info trainval file is saved to %s' % trainval_filename)
 
-    dataset.set_split('test')
-    kitti_infos_test = dataset.get_infos(num_workers=workers, has_label=False, count_inside_pts=False)
-    with open(test_filename, 'wb') as f:
-        pickle.dump(kitti_infos_test, f)
-    print('Kitti info test file is saved to %s' % test_filename)
-
     print('---------------Start create groundtruth database for data augmentation---------------')
-    dataset.set_split(train_split)
     dataset.create_groundtruth_database(train_filename, split=train_split)
 
     print('---------------Data preparation Done---------------')
