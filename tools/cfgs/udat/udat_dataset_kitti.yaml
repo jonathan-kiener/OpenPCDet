@@ -6,7 +6,7 @@ DATA_PATH: '../../../data/all/single-infrastructure-side-kitti'
 
 # Relative to DATA_PATH
 PSEUDO_LABEL_PATH: '../../../out/all/bbox/it_1'
-KITTI_INFOS_PATH: '../../../out/all/kitti_infos/it_0'
+KITTI_INFOS_PATH: '../../../out/all/kitti_infos/gtbbox'
 
 # Either npy or kitti
 LABEL_MODE: 'kitti'

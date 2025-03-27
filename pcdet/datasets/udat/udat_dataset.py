@@ -1,4 +1,5 @@
 import os
+import copy
 
 import pickle
 import numpy as np
@@ -26,7 +27,7 @@ class UdatDataset(KittiDataset):
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
         
-        self.sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)][:dataset_cfg.MAX_USED]
+        self.set_split(self.split)
 
     def get_image_raw(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.jpg' % idx)
@@ -96,9 +97,15 @@ class UdatDataset(KittiDataset):
                 obj_list = self.get_label(sample_idx)
                 annotations = {}
                 annotations['name'] = np.array([obj.cls_type for obj in obj_list])
+                annotations['truncated'] = np.array([obj.truncation for obj in obj_list])
+                annotations['occluded'] = np.array([obj.occlusion for obj in obj_list])
+                annotations['alpha'] = np.array([obj.alpha for obj in obj_list])
+                annotations['bbox'] = np.concatenate([obj.box2d.reshape(1, 4) for obj in obj_list], axis=0)
                 annotations['dimensions'] = np.array([[obj.l, obj.h, obj.w] for obj in obj_list])  # lhw(camera) format
                 annotations['location'] = np.concatenate([obj.loc.reshape(1, 3) for obj in obj_list], axis=0)
                 annotations['rotation_y'] = np.array([obj.ry for obj in obj_list])
+                annotations['score'] = np.array([obj.score for obj in obj_list])
+                annotations['difficulty'] = np.array([obj.level for obj in obj_list], np.int32)
 
                 num_objects = len([obj.cls_type for obj in obj_list if obj.cls_type != 'DontCare'])
                 num_gt = len(annotations['name'])
@@ -158,6 +165,8 @@ class UdatDataset(KittiDataset):
             points = self.get_lidar(sample_idx)
             annos = info['annos']
             names = annos['name']
+            difficulty = annos['difficulty']
+            bbox = annos['bbox']
             gt_boxes = annos['gt_boxes_lidar']
 
             num_obj = gt_boxes.shape[0]
@@ -177,7 +186,8 @@ class UdatDataset(KittiDataset):
                 if (used_classes is None) or names[i] in used_classes:
                     db_path = str(filepath.relative_to(self.root_path / (self.dataset_cfg.KITTI_INFOS_PATH or "")))  # gt_database/xxxxx.bin
                     db_info = {'name': names[i], 'path': db_path, 'image_idx': sample_idx, 'gt_idx': i,
-                               'box3d_lidar': gt_boxes[i], 'num_points_in_gt': gt_points.shape[0]}
+                               'box3d_lidar': gt_boxes[i], 'num_points_in_gt': gt_points.shape[0],
+                               'difficulty': difficulty[i], 'bbox': bbox[i], 'score': annos['score'][i]}
                     if names[i] in all_db_infos:
                         all_db_infos[names[i]].append(db_info)
                     else:
@@ -189,7 +199,16 @@ class UdatDataset(KittiDataset):
             pickle.dump(all_db_infos, f)
 
     def evaluation(self, det_annos, class_names, **kwargs):
-        return "No eval avaliable", EasyDict()
+        if 'annos' not in self.kitti_infos[0].keys():
+            return None, {}
+
+        from .udat_object_eval_python import eval as kitti_eval
+
+        eval_det_annos = copy.deepcopy(det_annos)
+        eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
+        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
+
+        return ap_result_str, ap_dict
     
     def set_split(self, split):
         super().__init__(
@@ -197,23 +216,24 @@ class UdatDataset(KittiDataset):
         )
         self.split = split
         self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
-
-        self.sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)][:dataset_cfg.MAX_USED]
+        
+        self.sample_id_list = [f[:-4] for f in os.listdir(Path(self.dataset_cfg.DATA_PATH) / self.dataset_cfg.PSEUDO_LABEL_PATH)]
+        self.sample_id_list.sort()
+        if split == "train":
+            self.sample_id_list = self.sample_id_list[:self.dataset_cfg.MAX_USED]
+        else:
+            self.sample_id_list = self.sample_id_list[self.dataset_cfg.MAX_USED:]
 
 def create_kitti_infos(dataset_cfg, class_names, save_path, workers=4):
     dataset = UdatDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=False)
     train_split, val_split = 'train', 'val'
 
     train_filename = save_path / ('kitti_infos_%s.pkl' % train_split)
-    val_filename = save_path / ('kitti_infos_%s.pkl' % val_split)
     trainval_filename = save_path / 'kitti_infos_trainval.pkl'
-    test_filename = save_path / 'kitti_infos_test.pkl'
-
-    ## Not every frame has a pseudo-label due to remainders.
-    #sample_id_list = [f[:-4] for f in os.listdir(Path(dataset_cfg.DATA_PATH) / dataset_cfg.PSEUDO_LABEL_PATH)]
-
+  
     print('---------------Start to generate data infos---------------')
 
+    dataset.set_split(train_split)
     kitti_infos_train = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=True)
     with open(train_filename, 'wb') as f:
         pickle.dump(kitti_infos_train, f)
