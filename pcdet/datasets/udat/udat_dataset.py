@@ -9,7 +9,7 @@ from easydict import EasyDict
 from pathlib import Path
 
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
-from ...utils import object3d_udat, box_utils
+from ...utils import object3d_udat, object3d_kitti, box_utils
 from ..kitti.kitti_dataset import KittiDataset
 
 class UdatDataset(KittiDataset):
@@ -26,7 +26,8 @@ class UdatDataset(KittiDataset):
         super().__init__(
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
-        
+
+        self.root_split_path = self.root_path / 'training'
         self.set_split(self.split)
 
     def get_image_raw(self, idx):
@@ -47,7 +48,9 @@ class UdatDataset(KittiDataset):
     
     def get_label(self, idx):
         if self.dataset_cfg.LABEL_MODE == 'kitti':
-            return super().get_label(idx)
+            label_file = self.root_path / self.dataset_cfg.PSEUDO_LABEL_PATH / ('%s.txt' % idx)
+            assert label_file.exists()
+            return object3d_kitti.get_objects_from_label(label_file)
         else:
             label_file = self.root_path / self.dataset_cfg.PSEUDO_LABEL_PATH / ('%s.npy' % idx)
             assert label_file.exists() , f"File {label_file.name} not found."
@@ -97,15 +100,17 @@ class UdatDataset(KittiDataset):
                 obj_list = self.get_label(sample_idx)
                 annotations = {}
                 annotations['name'] = np.array([obj.cls_type for obj in obj_list])
-                annotations['truncated'] = np.array([obj.truncation for obj in obj_list])
-                annotations['occluded'] = np.array([obj.occlusion for obj in obj_list])
-                annotations['alpha'] = np.array([obj.alpha for obj in obj_list])
-                annotations['bbox'] = np.concatenate([obj.box2d.reshape(1, 4) for obj in obj_list], axis=0)
                 annotations['dimensions'] = np.array([[obj.l, obj.h, obj.w] for obj in obj_list])  # lhw(camera) format
                 annotations['location'] = np.concatenate([obj.loc.reshape(1, 3) for obj in obj_list], axis=0)
                 annotations['rotation_y'] = np.array([obj.ry for obj in obj_list])
-                annotations['score'] = np.array([obj.score for obj in obj_list])
-                annotations['difficulty'] = np.array([obj.level for obj in obj_list], np.int32)
+                
+                if self.dataset_cfg.LABEL_MODE == "kitti":
+                    annotations['truncated'] = np.array([obj.truncation for obj in obj_list])
+                    annotations['occluded'] = np.array([obj.occlusion for obj in obj_list])
+                    annotations['alpha'] = np.array([obj.alpha for obj in obj_list])
+                    annotations['bbox'] = np.concatenate([obj.box2d.reshape(1, 4) for obj in obj_list], axis=0)
+                    annotations['score'] = np.array([obj.score for obj in obj_list])
+                    annotations['difficulty'] = np.array([obj.level for obj in obj_list], np.int32)
 
                 num_objects = len([obj.cls_type for obj in obj_list if obj.cls_type != 'DontCare'])
                 num_gt = len(annotations['name'])
@@ -165,9 +170,11 @@ class UdatDataset(KittiDataset):
             points = self.get_lidar(sample_idx)
             annos = info['annos']
             names = annos['name']
-            difficulty = annos['difficulty']
-            bbox = annos['bbox']
             gt_boxes = annos['gt_boxes_lidar']
+
+            if self.dataset_cfg.LABEL_MODE == "kitti":
+                difficulty = annos['difficulty']
+                bbox = annos['bbox']
 
             num_obj = gt_boxes.shape[0]
             point_indices = roiaware_pool3d_utils.points_in_boxes_cpu(
@@ -186,8 +193,11 @@ class UdatDataset(KittiDataset):
                 if (used_classes is None) or names[i] in used_classes:
                     db_path = str(filepath.relative_to(self.root_path / (self.dataset_cfg.KITTI_INFOS_PATH or "")))  # gt_database/xxxxx.bin
                     db_info = {'name': names[i], 'path': db_path, 'image_idx': sample_idx, 'gt_idx': i,
-                               'box3d_lidar': gt_boxes[i], 'num_points_in_gt': gt_points.shape[0],
-                               'difficulty': difficulty[i], 'bbox': bbox[i], 'score': annos['score'][i]}
+                               'box3d_lidar': gt_boxes[i], 'num_points_in_gt': gt_points.shape[0]}
+                    
+                    if self.dataset_cfg.LABEL_MODE == "kitti":
+                        db_info.update({'difficulty': difficulty[i], 'bbox': bbox[i], 'score': annos['score'][i]})
+                    
                     if names[i] in all_db_infos:
                         all_db_infos[names[i]].append(db_info)
                     else:
@@ -215,14 +225,23 @@ class UdatDataset(KittiDataset):
             dataset_cfg=self.dataset_cfg, class_names=self.class_names, training=self.training, root_path=self.root_path, logger=self.logger
         )
         self.split = split
-        self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
+        self.root_split_path = self.root_path / 'training'
+
+        split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
+
+        # Takes all indexes from training data and checks that they exist as pseudo-labels
+        self.sample_id_list = [x.strip() for x in open(split_dir).readlines() if split!="train" or \
+                               (Path(self.dataset_cfg.DATA_PATH) / self.dataset_cfg.PSEUDO_LABEL_PATH / 
+                                (f"{x.strip()}.txt" if self.dataset_cfg.LABEL_MODE == 'kitti' else f"{x.strip()}.npy")).exists()] \
+                                    if split_dir.exists() else None
         
-        self.sample_id_list = [f[:-4] for f in os.listdir(Path(self.dataset_cfg.DATA_PATH) / self.dataset_cfg.PSEUDO_LABEL_PATH)]
-        self.sample_id_list.sort()
-        if split == "train":
-            self.sample_id_list = self.sample_id_list[:self.dataset_cfg.MAX_USED]
-        else:
-            self.sample_id_list = self.sample_id_list[self.dataset_cfg.MAX_USED:]
+        # When gt, need this code below to stay consistent
+        '''
+        self.sample_id_list = [x.strip() for x in open(split_dir).readlines() if split!="train" or \
+                       (Path(self.dataset_cfg.DATA_PATH) / "../../../out/all/bbox/it_0" / 
+                        f"{x.strip()}.npy").exists()] \
+                            if split_dir.exists() else None
+        '''
 
 def create_kitti_infos(dataset_cfg, class_names, save_path, workers=4):
     dataset = UdatDataset(dataset_cfg=dataset_cfg, class_names=class_names, training=False)

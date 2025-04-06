@@ -37,7 +37,7 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
     num_gt = len(gt_anno["name"])
     num_dt = len(dt_anno["name"])
     num_valid_gt = 0
-    print(f"---GT_ANNO---  {gt_anno}")
+    #print(f"---GT_ANNO---  {gt_anno}")
     for i in range(num_gt):
         bbox = gt_anno["bbox"][i]
         gt_name = gt_anno["name"][i].lower()
@@ -45,11 +45,6 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
         valid_class = -1
         if (gt_name == current_cls_name):
             valid_class = 1
-        elif (current_cls_name == "Pedestrian".lower()
-              and "Person_sitting".lower() == gt_name):
-            valid_class = 0
-        elif (current_cls_name == "Car".lower() and "Van".lower() == gt_name):
-            valid_class = 0
         else:
             valid_class = -1
         ignore = False
@@ -61,13 +56,11 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
         if valid_class == 1 and not ignore:
             ignored_gt.append(0)
             num_valid_gt += 1
-        elif (valid_class == 0 or (ignore and (valid_class == 1))):
+        elif ignore and (valid_class == 1):
             ignored_gt.append(1)
         else:
             ignored_gt.append(-1)
-    # for i in range(num_gt):
-        if gt_anno["name"][i] == "DontCare":
-            dc_bboxes.append(gt_anno["bbox"][i])
+
     for i in range(num_dt):
         if (dt_anno["name"][i].lower() == current_cls_name):
             valid_class = 1
@@ -621,13 +614,9 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
 
 
 def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict=None):
-    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
-                             0.5, 0.7], [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
-                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
-    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
-                             0.5, 0.5], [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
-                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
-    min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
+    overlap_0_7 = np.array([[0.7, 0.7, 0.7]])
+    overlap_0_5 = np.array([[0.5, 0.5, 0.5]])
+    min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0).swapaxes(1, 2)  # [2, 3, 1]
     class_to_name = {
         0: 'Object'
     }
@@ -641,7 +630,7 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
         else:
             current_classes_int.append(curcls)
     current_classes = current_classes_int
-    min_overlaps = min_overlaps[:, :, current_classes]
+    #min_overlaps = min_overlaps[:, :, current_classes]
     result = ''
     
     mAPbev, mAP3d, mAPbev_R40, mAP3d_R40 = do_eval(
@@ -700,18 +689,10 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
 
 def get_coco_eval_result(gt_annos, dt_annos, current_classes):
     class_to_name = {
-        0: 'Car',
-        1: 'Pedestrian',
-        2: 'Cyclist',
-        3: 'Van',
-        4: 'Person_sitting',
+        0: 'Object'
     }
     class_to_range = {
         0: [0.5, 0.95, 10],
-        1: [0.25, 0.7, 10],
-        2: [0.25, 0.7, 10],
-        3: [0.5, 0.95, 10],
-        4: [0.25, 0.7, 10],
     }
     name_to_class = {v: n for n, v in class_to_name.items()}
     if not isinstance(current_classes, (list, tuple)):

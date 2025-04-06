@@ -1,12 +1,11 @@
 DATASET: 'UdatDataset'
-MAX_USED: 1000
 
 # Relative to OpenPCDet/tools
-DATA_PATH: '../../../data/all/single-infrastructure-side-kitti'
+DATA_PATH: '../../../data/mobile/single-infrastructure-side-kitti'
 
 # Relative to DATA_PATH
-PSEUDO_LABEL_PATH: '../../../out/all/bbox/it_1'
-KITTI_INFOS_PATH: '../../../out/all/kitti_infos/gtbbox'
+PSEUDO_LABEL_PATH: 'training/label_2'
+KITTI_INFOS_PATH: '../../../out/all/kitti_infos/gt_mobile'
 
 # Either npy or kitti
 LABEL_MODE: 'kitti'
@@ -15,12 +14,12 @@ POINT_CLOUD_RANGE: [0, -50, -3, 150, 50, 1]
 
 DATA_SPLIT: {
     'train': train,
-    'test': train
+    'test': test
 }
 
 INFO_PATH: {
     'train': [kitti_infos_train.pkl],
-    'test': [kitti_infos_train.pkl],
+    'test': [kitti_infos_val.pkl],
 }
 
 GET_ITEM_LIST: ["points"]
